@@ -1,18 +1,15 @@
 # Flick Posts
 
-Two-phone AR rugby kicking game. One phone is the goal marker, the other tracks it with the camera. Every turn lasts 20 seconds, then the phones swap roles.
+Two-phone AR rugby kicking game. One phone is the goal marker, the other tracks it with the camera.
 
-## How a turn works
+## Playing
 
-1. **Goal phone:** tap "I'm the goal", lay it flat, screen up, where the posts should stand. The first tap asks for camera and motion access on both phones. Allow both: the swap happens later without a tap, so it needs the permissions already granted.
-2. **Kicker phone:** tap "I'm kicking", aim at the goal phone and tap it on screen once to lock its colour.
-3. **Goal phone:** tap "Start 20 second turn". It counts down 3 seconds, flashes **cyan** for under a second (the start signal), then shows a 20 second countdown.
-4. **Kicker phone:** sees the cyan flash, starts its own matching countdown in the top left, and you flick the ball at the posts.
-5. At zero the goal phone flashes **green** (the swap signal). The kicker's camera sees it and the kicker becomes the goal. The goal phone becomes the kicker. The new goal phone gets a 6 second "Get ready" countdown and starts the next turn by itself.
+1. **Goal phone:** tap "I'm the goal", lay it flat, screen up, where the posts should stand.
+2. **Kicker phone:** tap "I'm kicking" (allow camera and motion access), aim at the goal phone and tap it on screen once to lock its colour.
+3. **Goal phone:** tap "Start 20 second timer". The countdown shows on its screen.
+4. When it reaches zero the colour disappears and the goal phone returns to the menu. Swap over: the goal phone taps "I'm kicking" and the kicker taps "I'm the goal".
 
-The phones talk only through the camera, so the kicker must be pointing at the goal phone when the flashes happen.
-
-If a swap goes wrong: on the goal phone tap **Swap now**, on the kicker open **Settings** and tap **Become the goal**.
+"End timer" on the goal phone stops the countdown early. Scores are kept on each phone until the page is reloaded.
 
 ## Deploy on Vercel
 

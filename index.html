@@ -25,6 +25,7 @@ h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:1;letter-spacing:-.02em;
 .big span{font-size:13px;font-weight:400;color:var(--dim)}
 .big.alt{background:transparent}
 .fine{margin:6px 0 0;color:var(--dim);font-size:12.5px}
+.note{margin:0;padding:12px 14px;border:1px solid var(--edge);border-radius:12px;background:rgba(70,255,122,.14);color:var(--ink)}
 /* marker */
 #marker{background:#ff00e6;flex-direction:column;align-items:center;justify-content:space-between;color:#000;touch-action:manipulation;overflow:hidden}
 #mTop{padding:14px 16px 0;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:13px;text-align:center}
@@ -44,9 +45,6 @@ h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:1;letter-spacing:-.02em;
 #score{font-size:34px;font-weight:750;line-height:1;font-variant-numeric:tabular-nums}
 #score small{font-size:14px;font-weight:500;color:var(--dim);margin-left:4px}
 #sub{font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
-#kTimer{margin-top:4px;font-size:22px;font-weight:750;font-variant-numeric:tabular-nums;text-shadow:0 1px 8px #000;display:none}
-#kTimer.on{display:block}
-#kTimer.low{color:var(--warn)}
 .tools{position:absolute;right:max(14px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;gap:8px}
 .tool{background:var(--panel);border:1px solid var(--edge);border-radius:999px;padding:9px 14px;font-size:14px}
 .tool[aria-pressed=true]{background:var(--glow);color:#03170a;border-color:var(--glow)}
@@ -75,7 +73,8 @@ h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:1;letter-spacing:-.02em;
   <div class="menu-in">
     <p class="eyebrow">Two phones, one tabletop</p>
     <h1>Flick Posts</h1>
-    <p class="lede">One phone is the goal. The other watches it through the camera, plants glowing rugby posts on top of it, and lets you flick a ball over the bar. Every 20 seconds the phones swap roles.</p>
+    <p class="lede">One phone is the goal. The other watches it through the camera, plants glowing rugby posts on top of it, and lets you flick a ball over the bar. Start a 20 second timer on the goal phone, then swap roles when it ends.</p>
+    <p class="note" id="menuNote" hidden>Time's up. Swap over: the goal phone taps I'm kicking, the kicker taps I'm the goal.</p>
     <button id="btnKick" class="big">I'm kicking<span>Uses this phone's camera and motion sensors</span></button>
     <button id="btnGoal" class="big alt">I'm the goal<span>Lay this phone flat, screen up, where the posts go</span></button>
     <p class="fine">Serve this file over HTTPS. Allow camera and motion access when asked.</p>
@@ -86,16 +85,16 @@ h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:1;letter-spacing:-.02em;
   <div id="mTop">Goal phone</div>
   <div id="mMid"><div id="mTimer">20</div><div id="mLabel">Seconds per turn</div></div>
   <div id="markerUi">
-    <div id="mHelp">Lay this phone flat, screen up, where the posts should stand. Tap Start once the kicker is aimed at it. The timer runs here, then the phones swap roles.</div>
-    <button class="go" id="btnStart">Start 20 second turn</button>
+    <div id="mHelp">Lay this phone flat, screen up, where the posts should stand. Tap Start once the kicker is aimed at it. The timer runs here, then this screen returns to the menu so you can swap roles.</div>
+    <button class="go" id="btnStart">Start 20 second timer</button>
     <div id="chips" aria-label="Marker colour"></div>
-    <div class="mrow"><button class="mini" id="btnSkip" hidden>Swap now</button><button class="mini" id="markerBack">Back to menu</button></div>
+    <div class="mrow"><button class="mini" id="btnSkip" hidden>End timer</button><button class="mini" id="markerBack">Back to menu</button></div>
   </div>
   <div id="mBar"></div>
 </section>
 
 <section id="game" class="screen">
-  <div class="hud"><div id="score">0<small>pts</small></div><div id="sub">0 of 0 kicks · streak 0</div><div id="kTimer"></div></div>
+  <div class="hud"><div id="score">0<small>pts</small></div><div id="sub">0 of 0 kicks · streak 0</div></div>
   <div class="tools">
     <button class="tool ui" id="btnLock" aria-pressed="false">Lock goal</button>
     <button class="tool ui" id="btnGear" aria-label="Settings">Settings</button>
@@ -112,7 +111,6 @@ h1{margin:0;font-size:clamp(40px,12vw,64px);line-height:1;letter-spacing:-.02em;
       <button id="btnAhead">Place goal ahead</button>
       <button id="btnDbg">Show tracker view</button>
       <button id="btnReset">Reset score</button>
-      <button id="btnBecomeGoal">Become the goal</button>
       <button id="btnMenu">Back to menu</button>
     </div>
   </div>
@@ -202,46 +200,9 @@ function stepBall(b,f,dt){
   if(b.t>5)return{r:'short'};return null;}
 function runShot(f,shot){const b={p:shot.p.slice(),v:shot.v.slice(),t:0,p0z:shot.p[2]};let r=null;
   for(let i=0;i<2000&&!r;i++)r=stepBall(b,f,1/120);return r||{r:'short'};}
-// ---- turn timing and the optical hand-shake between the two phones ----
-// Goal phone: ready -> start pulse (cyan) -> live -> swap pulse (green) -> becomes the kicker.
-// Kicker phone: waits for the start pulse, counts down from it, and becomes the goal when it sees the swap pulse.
-const TURN={first:3000,ready:6000,pulse:700,live:20000,swap:1500,grace:2500};
-const SIG={start:{h:187,tol:24},swap:{h:111,tol:24}};
-function sigTarget(s){return{h:s.h,hTol:s.tol,sMin:0.38,vMin:0.4};}
-function goalPhase(elapsed,readyMs){
-  if(elapsed<readyMs)return{phase:'ready',left:readyMs-elapsed};
-  let e=elapsed-readyMs;
-  if(e<TURN.pulse)return{phase:'start',left:TURN.live};
-  e-=TURN.pulse;
-  if(e<TURN.live)return{phase:'live',left:TURN.live-e};
-  e-=TURN.live;
-  if(e<TURN.swap)return{phase:'swap',left:0};
-  return{phase:'done',left:0};}
-function makeSignal(need,gap){return{first:null,last:0,need,gap};}
-function resetSignal(s){s.first=null;s.last=0;}
-// true once the signal has been seen for `need` ms with no gap longer than `gap` ms
-function feedSignal(s,seen,now){
-  if(!seen)return false;
-  if(s.first===null||now-s.last>s.gap)s.first=now;
-  s.last=now;return now-s.first>=s.need;}
-function makeKickSync(){return{phase:'waiting',liveEnd:0,ignoreUntil:0,lastMarker:null,sStart:makeSignal(250,200),sSwap:makeSignal(250,200)};}
-// true: near the marker, false: far from it, null: marker not seen in the last 6 s
-function nearMarker(ks,b,now){if(!ks.lastMarker||now-ks.lastMarker.t>6000)return null;return Math.hypot(b.cx-ks.lastMarker.cx,b.cy-ks.lastMarker.cy)<0.3;}
-function sigOk(ks,b,now,needMarker,frameArea){
-  if(!b||b.area>frameArea*0.35)return false;
-  const near=nearMarker(ks,b,now);
-  if(near===false)return false;
-  if(near===null&&(needMarker||b.area>frameArea*0.08))return false;
-  return true;}
-// one camera frame in; returns 'swap' when this phone should become the goal
-function kickSyncStep(ks,now,marker,startB,swapB,frameArea){
-  if(marker)ks.lastMarker={cx:marker.cx,cy:marker.cy,t:now};
-  if(now<ks.ignoreUntil){resetSignal(ks.sStart);resetSignal(ks.sSwap);return null;}
-  if(ks.phase==='waiting'&&feedSignal(ks.sStart,sigOk(ks,startB,now,true,frameArea),now)){
-    ks.phase='live';ks.liveEnd=ks.sStart.first+TURN.pulse+TURN.live;resetSignal(ks.sStart);}
-  if(feedSignal(ks.sSwap,sigOk(ks,swapB,now,false,frameArea),now)){resetSignal(ks.sSwap);return'swap';}
-  if(ks.phase==='live'&&now>ks.liveEnd+TURN.grace)return'swap';
-  return null;}
+// ---- goal phone timer ----
+const TURN_MS=20000;
+function turnLeft(elapsed){return Math.max(0,TURN_MS-elapsed);}
 // ==== END CORE ====
 
 // ==== APP ====
@@ -250,37 +211,36 @@ const cam=$('cam'),fx=$('fx'),ctx=fx.getContext('2d'),game=$('game'),sheet=$('sh
 function show(id){['menu','marker','game'].forEach(s=>$(s).classList.toggle('on',s===id));}
 async function wake(){try{if(navigator.wakeLock)await navigator.wakeLock.request('screen');}catch(e){}}
 
-// ---- goal phone: marker, 20 second timer, swap flash ----
+// ---- goal phone: marker and 20 second timer ----
 const MARK=[['Magenta','#ff00e6'],['Orange','#ff6a00']];
-const SIGCOL={start:'#00e5ff',swap:'#39ff14'};
 let markerColour=MARK[0][1],gs=null,gsTimer=0,gsKey='';
 function setMarker(c){markerColour=c;gsKey='';goalTick();}
 MARK.forEach(([n,c])=>{const b=document.createElement('button');b.className='chip';b.style.background=c;b.setAttribute('aria-label',n);
   b.onclick=()=>setMarker(c);$('chips').appendChild(b);});
-function enterGoal(auto){
+function enterGoal(){
   role='goal';show('marker');setCamEnabled(false);wake();
-  gs={t0:auto?performance.now():0,readyMs:auto?TURN.ready:TURN.first};gsKey='';
-  clearInterval(gsTimer);gsTimer=setInterval(goalTick,50);goalTick();}
+  gs={t0:0};gsKey='';
+  clearInterval(gsTimer);gsTimer=setInterval(goalTick,100);goalTick();}
 function goalTick(){
   if(role!=='goal'||!gs)return;
-  const idle=!gs.t0,r=idle?{phase:'idle',left:TURN.live}:goalPhase(performance.now()-gs.t0,gs.readyMs);
-  if(r.phase==='done'){clearInterval(gsTimer);gs=null;enterKick(true);return;}
-  $('mBar').style.transform='scaleX('+(r.phase==='live'?1-r.left/TURN.live:r.phase==='swap'?1:0)+')';
-  const digits=r.phase==='swap'?0:Math.ceil(r.left/1000),key=r.phase+digits+markerColour;
+  const idle=!gs.t0,left=idle?TURN_MS:turnLeft(performance.now()-gs.t0);
+  if(!idle&&left<=0){timeUp();return;}
+  $('mBar').style.transform='scaleX('+(idle?0:1-left/TURN_MS)+')';
+  const digits=Math.ceil(left/1000),key=(idle?'i':'l')+digits+markerColour;
   if(key===gsKey)return;gsKey=key;
-  $('marker').style.background=r.phase==='start'?SIGCOL.start:r.phase==='swap'?SIGCOL.swap:markerColour;
+  $('marker').style.background=markerColour;
   $('mTimer').textContent=digits;
-  $('mLabel').textContent={idle:'Seconds per turn',ready:'Get ready',start:'Go',live:'Time left',swap:'Swap!'}[r.phase];
-  $('mTop').textContent=r.phase==='swap'?'You kick next':'Goal phone';
-  $('mHelp').hidden=!idle;$('btnStart').hidden=!idle;$('chips').hidden=!idle;$('btnSkip').hidden=idle;
-  if(r.phase==='swap'&&navigator.vibrate)navigator.vibrate([80,60,80]);}
+  $('mLabel').textContent=idle?'Seconds per turn':'Time left';
+  $('mHelp').hidden=!idle;$('btnStart').hidden=!idle;$('chips').hidden=!idle;$('btnSkip').hidden=idle;}
+// time is up: the colour disappears and the phone goes back to the menu
+function timeUp(){toMenu();$('menuNote').hidden=false;if(navigator.vibrate)navigator.vibrate([120,80,120]);}
 $('btnStart').onclick=()=>{if(gs&&!gs.t0)gs.t0=performance.now();};
-$('btnSkip').onclick=()=>{if(gs&&gs.t0)gs.t0=performance.now()-(gs.readyMs+TURN.pulse+TURN.live);};
-$('markerBack').onclick=()=>{clearInterval(gsTimer);gs=null;role='menu';show('menu');};
+$('btnSkip').onclick=timeUp;
+$('markerBack').onclick=()=>{toMenu();$('menuNote').hidden=true;};
 
 // ---- kicker state ----
 let R=rotMatrix(0,90,0),haveOrient=false,view=null,ang=0,stream=null;
-let role='menu',camOk=true,permsP=null,kickAt=0,kr=makeKickSync();
+let role='menu',camOk=true,permsP=null,kickAt=0;
 let goal=null,locked=false,seenAt=0,tracked=null,dist=1,target={h:306,hTol:26,sMin:0.5,vMin:0.5};
 let ball=null,ballLive=false,ballReady=true,score=0,made=0,kicks=0,streak=0,flash=0,trail=[];
 let dbgOn=false,lastImg=null,lastTrack=0,calibrated=false,lastStatus=0,running=false;
@@ -289,7 +249,7 @@ const REST={x:0.5,y:0.82};
 const MSG={good:['Over! +3','#46ff7a'],bar:['Under the bar','#ffc857'],wideL:['Wide left','#ff5d73'],wideR:['Wide right','#ff5d73'],high:['Too high','#ffc857'],short:['Short','#ff5d73']};
 
 function onOrient(e){if(e.beta==null)return;haveOrient=true;R=rotMatrix(e.alpha||0,e.beta,e.gamma||0);}
-// Both phones ask for motion and camera access on the first tap, because the roles swap later without a tap.
+// The kicker phone asks for motion and camera access when its button is tapped (iOS needs a tap for motion).
 async function doPerms(){
   let perm='granted';
   try{if(typeof DeviceOrientationEvent!=='undefined'&&DeviceOrientationEvent.requestPermission)perm=await DeviceOrientationEvent.requestPermission();}catch(e){perm='denied';}
@@ -299,21 +259,13 @@ async function doPerms(){
 }
 function ensurePerms(){return permsP||(permsP=doPerms());}
 function setCamEnabled(on){if(stream)stream.getVideoTracks().forEach(t=>{t.enabled=on;});cam.style.visibility=on?'visible':'hidden';}
-function enterKick(afterSwap){
+function enterKick(){
   role='kick';show('game');wake();setCamEnabled(true);
-  goal=null;tracked=null;locked=false;ball=null;ballLive=false;ballReady=true;trail=[];
-  kr=makeKickSync();kr.ignoreUntil=performance.now()+1200;kickAt=performance.now();
+  goal=null;tracked=null;locked=false;ball=null;ballLive=false;ballReady=true;trail=[];kickAt=performance.now();
   $('btnLock').setAttribute('aria-pressed','false');$('btnLock').textContent='Lock goal';sheet.classList.remove('open');
-  if(afterSwap)toast('Your turn to kick','#46ff7a');
   if(!running){running=true;requestAnimationFrame(loop);}
 }
-function becomeGoal(auto){ballLive=false;if(auto&&navigator.vibrate)navigator.vibrate([80,60,80]);enterGoal(auto);}
-function updateKTimer(now){
-  const el=$('kTimer');
-  if(kr.phase!=='live'){el.classList.remove('on','low');return;}
-  const left=Math.min(TURN.live,Math.max(0,kr.liveEnd-now));
-  el.textContent=Math.ceil(left/1000)+'s left';el.classList.add('on');el.classList.toggle('low',left<=5000);
-}
+function toMenu(){clearInterval(gsTimer);gs=null;role='menu';setCamEnabled(false);sheet.classList.remove('open');show('menu');}
 function setStatus(t,ok){const s=$('status');s.textContent=t;s.classList.toggle('ok',!!ok);}
 function toast(t,c){const el=$('toast');el.textContent=t;el.style.color=c||'#fff';el.classList.add('on');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('on'),1100);}
 
@@ -332,13 +284,6 @@ function track(now){
     if(!locked){const d=rayToWorld(R,ang,view,px,py),np=[d[0]*dist,d[1]*dist,d[2]*dist];
       goal=goal?goal.map((v,i)=>v+(np[i]-v)*0.3):np;}
   }
-  // the goal phone flashes cyan to start the turn and green to end it; its marker colour is gone while it flashes
-  const ign=now<kr.ignoreUntil,was=kr.phase;
-  const sB=(!ign&&was==='waiting')?detectBlob(img.data,GW,gh,sigTarget(SIG.start)).blob:null;
-  const wB=ign?null:detectBlob(img.data,GW,gh,sigTarget(SIG.swap)).blob;
-  const out=kickSyncStep(kr,now,b,sB,wB,GW*gh);
-  if(was==='waiting'&&kr.phase==='live')toast('Timer started','#46ff7a');
-  if(out==='swap')becomeGoal(true);
 }
 function drawMask(mask,w,h){const c=$('dbg');c.width=w;c.height=h;const x=c.getContext('2d'),im=x.createImageData(w,h);
   for(let i=0;i<w*h;i++){const v=mask[i]?255:0,p=i*4;im.data[p]=v?70:0;im.data[p+1]=v;im.data[p+2]=v?122:0;im.data[p+3]=255;}x.putImageData(im,0,0);}
@@ -431,20 +376,18 @@ function loop(now){
     ctx.save();ctx.translate(p.x,p.y+bob);glow(true);ctx.fillStyle='rgba(70,255,122,.7)';ctx.strokeStyle='rgba(215,255,228,.95)';ctx.lineWidth=2;
     ctx.beginPath();ctx.ellipse(0,0,36,22,-Math.PI/2,0,7);ctx.fill();ctx.stroke();glow(false);ctx.restore();}
   if(now-lastStatus>200){lastStatus=now;
-    const live=tracked&&now-seenAt<600,wait=kr.phase==='waiting'?' · waiting for the timer':'';
+    const live=tracked&&now-seenAt<600;
     if(!camOk)setStatus('No camera access. Allow it in your browser settings, or place the goal by hand in Settings.');
     else if(!haveOrient&&now-kickAt>2500)setStatus('No motion sensor data. The goal will not stay put when you turn.');
-    else if(live)setStatus((locked?'Goal locked':'Tracking the goal phone')+' · '+dist.toFixed(2)+' m'+wait,true);
-    else if(goal)setStatus((locked?'Goal locked in place':'Lost the marker, holding the last spot')+wait);
+    else if(live)setStatus((locked?'Goal locked':'Tracking the goal phone')+' · '+dist.toFixed(2)+' m',true);
+    else if(goal)setStatus(locked?'Goal locked in place':'Lost the marker, holding the last spot');
     else if(!calibrated)setStatus('Tap the other phone on screen to lock its colour');
     else setStatus('Looking for the goal phone…');}
-  updateKTimer(now);
 }
 
 // ---- ui wiring ----
-$('btnKick').onclick=async()=>{await ensurePerms();enterKick(false);};
-$('btnGoal').onclick=async()=>{await ensurePerms();enterGoal(false);};
-$('btnBecomeGoal').onclick=()=>{sheet.classList.remove('open');becomeGoal(false);};
+$('btnKick').onclick=async()=>{$('menuNote').hidden=true;await ensurePerms();enterKick();};
+$('btnGoal').onclick=()=>{$('menuNote').hidden=true;enterGoal();};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&role!=='menu')wake();});
 $('btnGear').onclick=e=>{e.stopPropagation();sheet.classList.toggle('open');};
 $('btnLock').onclick=()=>{locked=!locked;$('btnLock').setAttribute('aria-pressed',locked);$('btnLock').textContent=locked?'Locked':'Lock goal';};
@@ -455,7 +398,7 @@ $('btnAhead').onclick=()=>{if(!view)return;const d=rayToWorld(R,ang,view,view.sw
   $('btnLock').setAttribute('aria-pressed','true');$('btnLock').textContent='Locked';sheet.classList.remove('open');};
 $('btnDbg').onclick=()=>{dbgOn=!dbgOn;$('dbg').style.display=dbgOn?'block':'none';};
 $('btnReset').onclick=()=>{score=made=kicks=streak=0;updateHud();};
-$('btnMenu').onclick=()=>{sheet.classList.remove('open');if(stream)stream.getTracks().forEach(t=>t.stop());location.reload();};
+$('btnMenu').onclick=toMenu;
 applyGoalSize(0.30);
 </script>
 </body>
